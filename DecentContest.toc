@@ -1,0 +1,9 @@
+## Interface: 16001
+## Title: |cffa070ffDecent|rContest
+## Notes: Transmog contests: join as a judge or contestant, score Theme, Color and Creativity 1-10, highest total wins.
+## Author: Decent
+## Version: 1.0.0
+## SavedVariables: DecentContestDB
+## IconTexture: Interface\Icons\INV_Chest_Cloth_17
+
+DecentContest.lua
