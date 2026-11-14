@@ -809,6 +809,7 @@ local BLIZZARD_INSET = {
 local themedBoxes = {}
 
 local function Tooltip(owner, title, body)
+    if not owner or not owner.EnableMouse or not owner.SetScript then return owner end
     owner:EnableMouse(true)
     owner:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -1194,7 +1195,7 @@ local function BuildMain()
     end
     lobby.note = MakeLabel(lobby, "Once the host starts, judges and contestants are locked in until the contest ends.", "GameFontDisableSmall")
     lobby.note:SetPoint("TOPLEFT", lobby.jbox, "BOTTOMLEFT", 4, -6)
-    Tooltip(lobby.note, "Before the contest starts", "Review the judge and contestant lists. Starting locks these roles until the contest ends.")
+    Tooltip(lobby.jbox, "Before the contest starts", "Review the judge and contestant lists. Starting locks these roles until the contest ends.")
     lobby.leave = MakeButton(lobby, "Leave", 80, function() JoinAs("X") end)
     lobby.leave:SetPoint("BOTTOMLEFT", 0, 0)
     Tooltip(lobby.leave, "Leave contest", "Remove yourself from the roster while the lobby is open.")
@@ -1315,10 +1316,11 @@ local function BuildMain()
         local row = {}
         row.label = MakeLabel(panel, crit.label, "GameFontNormal")
         row.label:SetPoint("TOPLEFT", mbox, "TOPRIGHT", 16, -6 - (i - 1) * 66)
-        Tooltip(row.label, crit.label, i == 1 and "Score how clearly the outfit matches the announced theme and how cohesive the overall look feels. Use 1 for a weak match and 10 for an excellent match."
+        local scoreHelp = i == 1 and "Score how clearly the outfit matches the announced theme and how cohesive the overall look feels. Use 1 for a weak match and 10 for an excellent match."
             or i == 2 and "Score how well the outfit's colors work together. Use 1 for clashing colors and 10 for a polished palette."
-            or "Score the originality and visual interest of the outfit. Use 1 for a familiar look and 10 for a highly creative presentation.")
+            or "Score the originality and visual interest of the outfit. Use 1 for a familiar look and 10 for a highly creative presentation."
         row.slider = MakeSlider(panel, 190, function(v) OnScore(crit.key, v) end)
+        Tooltip(row.slider, crit.label, scoreHelp)
         row.slider:SetPoint("TOPLEFT", row.label, "BOTTOMLEFT", 0, -8)
         row.box = MakeEditBox(panel, 28, 2, true)
         row.box:SetPoint("LEFT", row.slider, "RIGHT", 12, 0)
