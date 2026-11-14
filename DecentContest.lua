@@ -1697,6 +1697,14 @@ end
 
 SLASH_DECENTCONTEST1 = "/dcon"
 SLASH_DECENTCONTEST2 = "/decentcontest"
+function DecentContest_OnAddonCompartmentClick(_, buttonName)
+    if buttonName == "RightButton" then
+        if settingsFrame then settingsFrame:Show() end
+    elseif UI.main then
+        UI.main:SetShown(not UI.main:IsShown())
+    end
+end
+
 SlashCmdList.DECENTCONTEST = function(input)
     input = strtrim(input or "")
     local cmd, rest = input:match("^(%S*)%s*(.-)$")

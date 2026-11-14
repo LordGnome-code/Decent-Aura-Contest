@@ -16,7 +16,8 @@ the host's chat announcements tell them where to get it.
 
 The minimap clothing icon opens the contest window with a left-click and Settings with a
 right-click. Drag it around the minimap to reposition it. Hide it from Settings or with
-`/dcon minimap`.
+`/dcon minimap`. The addon also registers the clothing icon in the native Addon Compartment,
+which minimap icon-bag addons can collect.
 
 ## How a contest works
 1. **Host:** type `/dcon`, enter a **theme** (e.g. "Pirates of the Vale"), pick **Group** or
