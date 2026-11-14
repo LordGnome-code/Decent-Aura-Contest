@@ -4,6 +4,6 @@
 ## Author: Decent
 ## Version: 1.0.0
 ## SavedVariables: DecentContestDB
-## IconTexture: Interface\Icons\INV_Chest_Cloth_17
+## IconTexture: Interface\Icons\INV_Chest_Cloth_29
 
 DecentContest.lua
