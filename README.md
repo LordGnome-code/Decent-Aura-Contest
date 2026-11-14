@@ -14,11 +14,17 @@ Judges score every contestant on three categories, and the highest overall score
 Everyone who wants to judge or compete needs the addon. Players without it can still watch, and
 the host's chat announcements tell them where to get it.
 
+The minimap clothing icon opens the contest window with a left-click and Settings with a
+right-click. Drag it around the minimap to reposition it. Hide it from Settings or with
+`/dcon minimap`.
+
 ## How a contest works
 1. **Host:** type `/dcon`, enter a **theme** (e.g. "Pirates of the Vale"), pick **Group** or
    **Guild** and click **Open Lobby**. The host's group or guild chat gets an announcement.
-2. **Lobby:** everyone with the addon sees the contest pop up. They click **Join as Judge**
-   or **Join as Contestant**. Anyone can switch roles or **Leave** while the lobby is open.
+2. **Lobby:** everyone with the addon sees the contest pop up. Choose one of the two role cards:
+   **Judge** to score each contestant, or **Contestant** to compete. The lobby shows both role lists
+   before the host starts, so everyone can confirm the assignments. Anyone can switch roles or
+   **Leave** while the lobby is open.
    The host can join as a judge or contestant too, or just run the contest.
 3. **Start:** the host clicks **Start Contest** (needs at least 1 judge and 1 contestant).
    - Every player is told **who the judges are**, both in the window and in chat.
@@ -70,7 +76,16 @@ the total for each category, the overall total, and the average per judge.
 | `/dcon reset` | Clear a stuck contest on your side (cancels it if you're the host) |
 | `/dcon announce` | Toggle chat announcements when hosting |
 | `/dcon popup` | Toggle opening the window when someone opens a contest |
-| `/dcon scale <0.5-2>` / `/dcon resetpos` | Window size / position |
+| `/dcon settings` | Open the settings window |
+| `/dcon minimap` | Show or hide the minimap icon |
+| `/dcon scale <0.6-1.5>` / `/dcon resetpos` | Window size / position |
+
+## Settings
+
+The Settings window includes **Use Blizzard-style window**, which switches between the game's
+marble/rock panels with native button artwork and the purple DecentContest theme. It also controls
+position locking, the minimap icon, chat announcements, lobby popups, show-on-login, and window
+scale. Hover the controls and role cards for descriptions. Settings are saved in `DecentContestDB`.
 
 Saved per account in `DecentContestDB`: settings, contest history, in-progress judge scores and
 the contest you're hosting.

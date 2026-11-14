@@ -43,12 +43,17 @@ local DEFAULTS = {
     popup       = true,      -- open the window when someone opens a contest
     showOnLogin = false,
     scale       = 1.0,
+    blizzardUI  = false,
+    locked      = false,
+    minimap     = true,
+    minimapAngle = 200,
     maxHistory  = 50,
     pos         = nil,
 }
 
 local DB, S
 local UI = {}
+local settingsFrame, minimapButton
 local H                      -- host state (only while you are hosting), saved in DB.host
 local game                   -- what this client knows about the current contest
 local draft                  -- this judge's scores for the current contest, saved in DB.drafts
@@ -789,6 +794,32 @@ local BOX_BACKDROP = {
     insets = { left = 3, right = 3, top = 3, bottom = 3 },
 }
 local FLAT_BACKDROP = { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 }
+local BLIZZARD_FRAME = {
+    bgFile = "Interface\\FrameGeneral\\UI-Background-Marble",
+    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+    tile = true, tileSize = 256, edgeSize = 32,
+    insets = { left = 11, right = 12, top = 12, bottom = 11 },
+}
+local BLIZZARD_INSET = {
+    bgFile = "Interface\\FrameGeneral\\UI-Background-Rock",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true, tileSize = 256, edgeSize = 12,
+    insets = { left = 4, right = 4, top = 4, bottom = 4 },
+}
+local themedBoxes = {}
+
+local function Tooltip(owner, title, body)
+    owner:EnableMouse(true)
+    owner:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(title, 1, .82, 0)
+        local text = type(body) == "function" and body() or body
+        if text then GameTooltip:AddLine(text, 1, 1, 1, true) end
+        GameTooltip:Show()
+    end)
+    owner:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    return owner
+end
 
 local function MakeBox(parent, w, h, title)
     local b = CreateFrame("Frame", nil, parent, BACKDROP_TEMPLATE)
@@ -796,6 +827,7 @@ local function MakeBox(parent, w, h, title)
     b:SetBackdrop(BOX_BACKDROP)
     b:SetBackdropColor(0, 0, 0, 0.55)
     b:SetBackdropBorderColor(0.4, 0.3, 0.6, 1)
+    themedBoxes[#themedBoxes + 1] = b
     if title then
         b.title = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         b.title:SetPoint("TOPLEFT", 10, -8)
@@ -810,6 +842,105 @@ local function MakeButton(parent, text, w, onClick)
     b:SetText(text)
     if onClick then b:SetScript("OnClick", onClick) end
     return b
+end
+
+local function MakeCheck(parent, text, key, y)
+    local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+    check:SetPoint("TOPLEFT", 14, y)
+    check.text = check:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    check.text:SetPoint("LEFT", check, "RIGHT", 2, 0)
+    check.text:SetText(text)
+    check:SetChecked(S[key] and true or false)
+    check:SetScript("OnClick", function(self)
+        S[key] = self:GetChecked() and true or false
+        if key == "scale" then
+            UI.main:SetScale(S.scale)
+        elseif key == "blizzardUI" then
+            if UI.applyTheme then UI.applyTheme() end
+        elseif key == "minimap" then
+            if minimapButton then minimapButton:SetShown(S.minimap) end
+        end
+    end)
+    return check
+end
+
+local function SkinFrame(f, inset)
+    if not f.SetBackdrop then return end
+    if S.blizzardUI then
+        f:SetBackdrop(inset and BLIZZARD_INSET or BLIZZARD_FRAME)
+        f:SetBackdropColor(1, 1, 1, 1)
+        f:SetBackdropBorderColor(1, 1, 1, 1)
+    else
+        f:SetBackdrop(inset and BOX_BACKDROP or FRAME_BACKDROP)
+        f:SetBackdropColor(inset and 0 or .06, inset and 0 or .03, inset and 0 or .10, inset and .55 or .96)
+        f:SetBackdropBorderColor(.63, .44, 1, 1)
+    end
+end
+
+local function ApplyTheme()
+    if UI.main then SkinFrame(UI.main, false) end
+    if UI.settings then SkinFrame(UI.settings, false) end
+    for _, box in ipairs(themedBoxes) do SkinFrame(box, true) end
+    if UI.blizzardTabs then
+        for _, tab in ipairs(UI.blizzardTabs) do
+            if S.blizzardUI then
+                tab:SetNormalTexture("Interface\\Buttons\\UI-Panel-Button-Up")
+                tab:SetPushedTexture("Interface\\Buttons\\UI-Panel-Button-Down")
+                tab:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+                tab.text:SetTextColor(1, .82, .1)
+            else
+                tab:SetNormalTexture(nil); tab:SetPushedTexture(nil); tab:SetHighlightTexture(nil)
+                tab.text:SetTextColor(1, 1, 1)
+            end
+        end
+    end
+    if UI.main and UI.main:IsShown() and UI.idle then Refresh() end
+end
+
+local function ToggleSettings()
+    if settingsFrame then settingsFrame:SetShown(not settingsFrame:IsShown()) end
+end
+
+local function PositionMinimap()
+    if not minimapButton or not Minimap then return end
+    local angle = math.rad(S.minimapAngle or 200)
+    local radius = Minimap:GetWidth() / 2 + 8
+    minimapButton:ClearAllPoints()
+    minimapButton:SetPoint("CENTER", Minimap, "CENTER", math.cos(angle) * radius, math.sin(angle) * radius)
+end
+
+local function BuildMinimapButton()
+    if not Minimap or minimapButton then return end
+    local b = CreateFrame("Button", "DecentContestMinimapButton", Minimap)
+    minimapButton = b
+    b:SetSize(31, 31); b:SetFrameLevel(Minimap:GetFrameLevel() + 8)
+    b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    b:RegisterForDrag("LeftButton")
+    b:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+    local icon = b:CreateTexture(nil, "ARTWORK")
+    icon:SetSize(21, 21); icon:SetPoint("CENTER")
+    icon:SetTexture("Interface\\Icons\\INV_Chest_Cloth_17")
+    local border = b:CreateTexture(nil, "OVERLAY")
+    border:SetSize(53, 53); border:SetPoint("CENTER")
+    border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+    b:SetScript("OnClick", function(_, button)
+        if button == "RightButton" then ToggleSettings()
+        elseif UI.main then UI.main:SetShown(not UI.main:IsShown()) end
+    end)
+    b:SetScript("OnDragStart", function(self)
+        if S.locked then return end
+        self:SetScript("OnUpdate", function()
+            local x, y = GetCursorPosition()
+            local scale = Minimap:GetEffectiveScale()
+            local mx, my = Minimap:GetCenter()
+            S.minimapAngle = math.deg(math.atan2(y / scale - my, x / scale - mx))
+            PositionMinimap()
+        end)
+    end)
+    b:SetScript("OnDragStop", function(self) self:SetScript("OnUpdate", nil) end)
+    Tooltip(b, "DecentContest", "Left-click to open the contest window. Right-click for settings. Drag to move this icon around the minimap.")
+    PositionMinimap()
+    b:SetShown(S.minimap)
 end
 
 local function MakeLabel(parent, text, template)
@@ -887,7 +1018,7 @@ local function BuildMain()
     f:EnableMouse(true)
     f:SetMovable(true)
     f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStart", function(self) if not S.locked then self:StartMoving() end end)
     f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing(); SavePos() end)
     f:SetBackdrop(FRAME_BACKDROP)
     f:SetBackdropColor(0.06, 0.03, 0.10, 0.96)
@@ -906,6 +1037,69 @@ local function BuildMain()
     f.sub:SetWordWrap(false)
     local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", -2, -2)
+    Tooltip(close, "Close", "Close the contest window. You remain in any contest you joined.")
+    local gear = MakeButton(f, "Settings", 74, ToggleSettings)
+    gear:SetPoint("TOPRIGHT", close, "TOPLEFT", -2, -4)
+    Tooltip(gear, "Settings", "Change the window style, scale, announcements, popups, and minimap icon.")
+    local icon = f:CreateTexture(nil, "ARTWORK")
+    icon:SetSize(20, 20); icon:SetTexture("Interface\\Icons\\INV_Chest_Cloth_17")
+    icon:SetPoint("RIGHT", f.title, "LEFT", -8, 0)
+
+    local settings = CreateFrame("Frame", "DecentContestSettings", UIParent, BACKDROP_TEMPLATE)
+    UI.settings = settings
+    settingsFrame = settings
+    settings:SetSize(340, 340); settings:SetPoint("CENTER", 220, 0)
+    settings:SetFrameStrata("DIALOG"); settings:SetClampedToScreen(true); settings:EnableMouse(true)
+    settings:SetMovable(true); settings:RegisterForDrag("LeftButton")
+    settings:SetScript("OnDragStart", function(self) if not S.locked then self:StartMoving() end end)
+    settings:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+    settings:SetBackdrop(FRAME_BACKDROP); settings:SetBackdropColor(.06, .03, .10, .96)
+    settings:SetBackdropBorderColor(.63, .44, 1, 1)
+    table.insert(UISpecialFrames, "DecentContestSettings")
+    settings.title = settings:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    settings.title:SetPoint("TOPLEFT", 18, -18); settings.title:SetText("DecentContest Settings")
+    local settingsClose = CreateFrame("Button", nil, settings, "UIPanelCloseButton")
+    settingsClose:SetPoint("TOPRIGHT", -2, -2); settingsClose:SetScript("OnClick", function() settings:Hide() end)
+    Tooltip(settingsClose, "Close settings", "Close this window. Your choices are saved automatically.")
+    local function setting(text, key, y, help)
+        local check = MakeCheck(settings, text, key, y)
+        Tooltip(check, text, help)
+        return check
+    end
+    settings.settingsChecks = {}
+    setting("Use Blizzard-style window", "blizzardUI", -58,
+        "Use the game's marble frame, rock inset panels, and native tab artwork. Turn it off to return to the purple DecentContest theme.")
+    setting("Lock window positions", "locked", -92,
+        "Prevent dragging the main window, settings window, and minimap icon. The icon can still be clicked.")
+    setting("Show minimap icon", "minimap", -126,
+        "Show the clothing icon on the minimap. Left-click opens the contest; right-click opens these settings.")
+    setting("Announce contest events in chat", "announce", -160,
+        "Post lobby, start, and result announcements to the selected group or guild channel. Contest data itself uses addon messages.")
+    setting("Open window when a contest starts", "popup", -194,
+        "Automatically show the contest window when another player opens a lobby.")
+    setting("Show window on login", "showOnLogin", -228,
+        "Open the contest window when you enter the world.")
+    local scaleLabel = settings:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    scaleLabel:SetPoint("TOPLEFT", 18, -274); scaleLabel:SetText("Window scale: " .. math.floor((S.scale or 1) * 100 + .5) .. "%")
+    local scale = CreateFrame("Slider", nil, settings, BACKDROP_TEMPLATE)
+    scale:SetPoint("TOPLEFT", 18, -302); scale:SetSize(285, 16); scale:SetMinMaxValues(.6, 1.5)
+    scale:SetValueStep(.05); if scale.SetObeyStepOnDrag then scale:SetObeyStepOnDrag(true) end
+    scale:SetBackdrop({ bgFile = "Interface\\Buttons\\UI-SliderBar-Background", edgeFile = "Interface\\Buttons\\UI-SliderBar-Border", tile = true, tileSize = 8, edgeSize = 8 })
+    scale:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
+    scale:SetValue(S.scale or 1)
+    local low = settings:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    low:SetPoint("TOPLEFT", scale, "BOTTOMLEFT", 2, -2); low:SetText("60%")
+    local high = settings:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    high:SetPoint("TOPRIGHT", scale, "BOTTOMRIGHT", -2, -2); high:SetText("150%")
+    scale:SetScript("OnValueChanged", function(_, value)
+        S.scale = math.floor(value * 20 + .5) / 20
+        scaleLabel:SetText("Window scale: " .. math.floor(S.scale * 100 + .5) .. "%")
+        UI.main:SetScale(S.scale)
+    end)
+    Tooltip(scale, "Window scale", "Adjust the contest window size from 60% to 150%.")
+    settings:Hide()
+    UI.applyTheme = ApplyTheme
+    ApplyTheme()
     f:SetScript("OnShow", function() Refresh() end)
 
     local function View()
@@ -926,12 +1120,14 @@ local function BuildMain()
     idle.info:SetText("No contest is running. When someone in your group or guild opens one, it appears here.")
 
     local hb = MakeBox(idle, W - 24, 120, "Host a contest")
+    idle.hostBox = hb
     hb:SetPoint("TOPLEFT", 0, -34)
     local tl = MakeLabel(hb, "Theme:", "GameFontNormal")
     tl:SetPoint("TOPLEFT", 14, -40)
     idle.theme = MakeEditBox(hb, 470, MAX_THEME)
     idle.theme:SetPoint("LEFT", tl, "RIGHT", 12, 0)
     idle.theme:SetScript("OnEnterPressed", function(self) self:ClearFocus(); HostOpen(self:GetText()) end)
+    Tooltip(idle.theme, "Contest theme", "Enter a short theme for contestants to build their outfit around. The host announces it when the lobby opens.")
     idle.chan = MakeButton(hb, "", 150, function()
         S.channel = (S.channel == "GROUP") and "GUILD" or "GROUP"
         Refresh()
@@ -939,6 +1135,8 @@ local function BuildMain()
     idle.chan:SetPoint("TOPLEFT", 14, -76)
     idle.open = MakeButton(hb, "Open Lobby", 150, function() HostOpen(idle.theme:GetText()) end)
     idle.open:SetPoint("LEFT", idle.chan, "RIGHT", 10, 0)
+    Tooltip(idle.open, "Open lobby", "Create a lobby. Players can join as judges or contestants, and the host can check the role lists before starting.")
+    Tooltip(idle.chan, "Contest channel", "Choose the group or guild that receives this contest's addon messages and announcements.")
     idle.chanNote = MakeLabel(hb, "", "GameFontDisableSmall")
     idle.chanNote:SetPoint("LEFT", idle.open, "RIGHT", 12, 0)
     idle.chanNote:SetWidth(260)
@@ -967,10 +1165,26 @@ local function BuildMain()
     lobby.role = MakeLabel(lobby, "", "GameFontNormal")
     lobby.role:SetPoint("TOPLEFT", 4, -2)
     local half = (W - 24 - 10) / 2
-    lobby.jbox = MakeBox(lobby, half, 300, "Judges")
-    lobby.jbox:SetPoint("TOPLEFT", 0, -24)
-    lobby.cbox = MakeBox(lobby, half, 300, "Contestants")
-    lobby.cbox:SetPoint("TOPRIGHT", 0, -24)
+    lobby.judgeCard = MakeBox(lobby, half, 84, "Judge")
+    lobby.judgeCard:SetPoint("TOPLEFT", 0, -24)
+    lobby.contestCard = MakeBox(lobby, half, 84, "Contestant")
+    lobby.contestCard:SetPoint("TOPRIGHT", 0, -24)
+    lobby.judgeCard.description = MakeLabel(lobby.judgeCard, "Rate each contestant on three categories. Judges do not compete.", "GameFontDisableSmall")
+    lobby.judgeCard.description:SetPoint("TOPLEFT", 12, -30); lobby.judgeCard.description:SetWidth(half - 24); lobby.judgeCard.description:SetWordWrap(true)
+    lobby.contestCard.description = MakeLabel(lobby.contestCard, "Present your outfit for the judges. Contestants do not score.", "GameFontDisableSmall")
+    lobby.contestCard.description:SetPoint("TOPLEFT", 12, -30); lobby.contestCard.description:SetWidth(half - 24); lobby.contestCard.description:SetWordWrap(true)
+    lobby.judge = MakeButton(lobby.judgeCard, "Choose Judge", half - 24, function() JoinAs("J") end)
+    lobby.judge:SetPoint("BOTTOM", 0, 7)
+    lobby.contest = MakeButton(lobby.contestCard, "Choose Contestant", half - 24, function() JoinAs("C") end)
+    lobby.contest:SetPoint("BOTTOM", 0, 7)
+    Tooltip(lobby.judgeCard, "Judge", "Choose this role to score every contestant. Your scores are private until results are calculated.")
+    Tooltip(lobby.contestCard, "Contestant", "Choose this role to compete. Judges score your outfit using the displayed theme and criteria.")
+    Tooltip(lobby.judge, "Join as judge", "Add yourself to the judge roster. You can switch roles or leave before the host starts.")
+    Tooltip(lobby.contest, "Join as contestant", "Add yourself to the contestant roster. You can switch roles or leave before the host starts.")
+    lobby.jbox = MakeBox(lobby, half, 190, "Judges")
+    lobby.jbox:SetPoint("TOPLEFT", lobby.judgeCard, "BOTTOMLEFT", 0, -8)
+    lobby.cbox = MakeBox(lobby, half, 190, "Contestants")
+    lobby.cbox:SetPoint("TOPRIGHT", lobby.contestCard, "BOTTOMRIGHT", 0, -8)
     for _, b in ipairs({ lobby.jbox, lobby.cbox }) do
         b.list = MakeLabel(b, "", "GameFontHighlight")
         b.list:SetPoint("TOPLEFT", 14, -30)
@@ -980,22 +1194,22 @@ local function BuildMain()
     end
     lobby.note = MakeLabel(lobby, "Once the host starts, judges and contestants are locked in until the contest ends.", "GameFontDisableSmall")
     lobby.note:SetPoint("TOPLEFT", lobby.jbox, "BOTTOMLEFT", 4, -6)
-    lobby.judge = MakeButton(lobby, "Join as Judge", 140, function() JoinAs("J") end)
-    lobby.judge:SetPoint("BOTTOMLEFT", 0, 0)
-    lobby.contest = MakeButton(lobby, "Join as Contestant", 150, function() JoinAs("C") end)
-    lobby.contest:SetPoint("LEFT", lobby.judge, "RIGHT", 6, 0)
+    Tooltip(lobby.note, "Before the contest starts", "Review the judge and contestant lists. Starting locks these roles until the contest ends.")
     lobby.leave = MakeButton(lobby, "Leave", 80, function() JoinAs("X") end)
-    lobby.leave:SetPoint("LEFT", lobby.contest, "RIGHT", 6, 0)
+    lobby.leave:SetPoint("BOTTOMLEFT", 0, 0)
+    Tooltip(lobby.leave, "Leave contest", "Remove yourself from the roster while the lobby is open.")
     lobby.cancel = MakeButton(lobby, "Cancel Contest", 120, function()
         Confirm("Cancel this transmog contest?", function() HostCancel() end)
     end)
     lobby.cancel:SetPoint("BOTTOMRIGHT", 0, 0)
+    Tooltip(lobby.cancel, "Cancel contest", "Cancel the lobby for everyone. This cannot be undone.")
     lobby.start = MakeButton(lobby, "Start Contest", 120, function()
         if not H then return end
         Confirm(("Start the contest?\n\n%s and %s will be locked in until it ends.")
             :format(Plural(HostCount("J"), "judge"), Plural(HostCount("C"), "contestant")), HostStart)
     end)
     lobby.start:SetPoint("RIGHT", lobby.cancel, "LEFT", -6, 0)
+    Tooltip(lobby.start, "Start contest", "Lock the roster and begin judging. At least one judge and one contestant are required.")
 
     -------------------------------------------------------------------
     -- Judge view: tabs per contestant, model, 3 sliders
@@ -1007,17 +1221,20 @@ local function BuildMain()
     local tabsTitle = MakeLabel(tabsBox, "Contestants", "GameFontNormal")
     tabsTitle:SetPoint("TOPLEFT", 10, -8)
     judge.tabs = {}
+    UI.blizzardTabs = {}
     for i = 1, TAB_ROWS do
         local b = CreateFrame("Button", nil, tabsBox, BACKDROP_TEMPLATE)
         b:SetSize(152, TAB_H - 2)
         b:SetPoint("TOPLEFT", 10, -26 - (i - 1) * TAB_H)
         b:SetBackdrop(FLAT_BACKDROP)
+        UI.blizzardTabs[#UI.blizzardTabs + 1] = b
         b.text = MakeLabel(b, "", "GameFontHighlight")
         b.text:SetPoint("LEFT", 8, 0)
         b.text:SetPoint("RIGHT", -22, 0)
         b.text:SetWordWrap(false)
         b.check = b:CreateTexture(nil, "OVERLAY")
         b.check:SetSize(14, 14)
+        Tooltip(b, "Contestant scorecard", "Select this contestant to view their model and enter scores for Theme & Cohesion, Color Coordination, and Creativity.")
         b.check:SetPoint("RIGHT", -5, 0)
         b.check:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
         b:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
@@ -1098,6 +1315,9 @@ local function BuildMain()
         local row = {}
         row.label = MakeLabel(panel, crit.label, "GameFontNormal")
         row.label:SetPoint("TOPLEFT", mbox, "TOPRIGHT", 16, -6 - (i - 1) * 66)
+        Tooltip(row.label, crit.label, i == 1 and "Score how clearly the outfit matches the announced theme and how cohesive the overall look feels. Use 1 for a weak match and 10 for an excellent match."
+            or i == 2 and "Score how well the outfit's colors work together. Use 1 for clashing colors and 10 for a polished palette."
+            or "Score the originality and visual interest of the outfit. Use 1 for a familiar look and 10 for a highly creative presentation.")
         row.slider = MakeSlider(panel, 190, function(v) OnScore(crit.key, v) end)
         row.slider:SetPoint("TOPLEFT", row.label, "BOTTOMLEFT", 0, -8)
         row.box = MakeEditBox(panel, 28, 2, true)
@@ -1126,6 +1346,7 @@ local function BuildMain()
         if draft and draft.submitted then SubmitScores() return end   -- resend
         Confirm("Submit your scores for every contestant?\n\nYou can't change them afterwards.", SubmitScores)
     end)
+    Tooltip(judge.submit, "Submit scores", "Submit your final scores for all contestants. Submitted scores are locked; you may resend them if the host has not received them.")
     judge.submit:SetPoint("BOTTOMRIGHT", 0, 0)
     judge.endBtn = MakeButton(judge, "End Judging", 110, function()
         Confirm("End judging now?\n\nOnly judges who have already submitted will be counted.", HostFinalize)
@@ -1225,7 +1446,9 @@ local function BuildMain()
         end
         Announce(("Results for \"%s\": %s"):format(game.theme or "", table.concat(parts, ", ")))
     end)
+    Tooltip(res.announce, "Announce top 3", "Post the top three contestants and scores to the selected group or guild chat channel.")
     res.announce:SetPoint("BOTTOMLEFT", 0, 0)
+    ApplyTheme()
 end
 
 ---------------------------------------------------------------------------
@@ -1349,6 +1572,8 @@ function Refresh()
     for _, v in ipairs({ UI.idle, UI.lobby, UI.judge, UI.watch, UI.results }) do v:Hide() end
     local isHost = H ~= nil and game.hostIsMe and true or false
     local phase = game.phase
+    f:SetScale(S.scale or 1)
+    if UI.settings then UI.settings:SetScale(S.scale or 1) end
 
     if phase == "idle" then
         f.sub:SetText("|cffaaaaaaWaiting for a contest|r")
@@ -1376,6 +1601,12 @@ function Refresh()
         v.cbox.list:SetText(NameLines(game.contestants))
         v.judge:SetEnabled(game.myRole ~= "J")
         v.contest:SetEnabled(game.myRole ~= "C")
+        v.judge:SetText(game.myRole == "J" and "Selected: Judge" or "Choose Judge")
+        v.contest:SetText(game.myRole == "C" and "Selected: Contestant" or "Choose Contestant")
+        if v.judgeCard.SetBackdropColor then
+            v.judgeCard:SetBackdropColor(game.myRole == "J" and .13 or 0, game.myRole == "J" and .12 or 0, game.myRole == "J" and .22 or 0, game.myRole == "J" and .95 or .55)
+            v.contestCard:SetBackdropColor(game.myRole == "C" and .2 or 0, game.myRole == "C" and .12 or 0, game.myRole == "C" and .02 or 0, game.myRole == "C" and .95 or .55)
+        end
         v.leave:SetEnabled(game.myRole ~= nil)
         v.start:SetShown(isHost)
         v.cancel:SetShown(isHost)
@@ -1492,10 +1723,16 @@ SlashCmdList.DECENTCONTEST = function(input)
         Print("Open window when a contest opens: " .. (S.popup and "on" or "off"))
     elseif cmd == "scale" then
         local n = tonumber(rest)
-        if n and n >= 0.5 and n <= 2 then S.scale = n; UI.main:SetScale(n) else Print("Usage: /dcon scale 0.5-2") end
+        if n and n >= 0.6 and n <= 1.5 then S.scale = n; UI.main:SetScale(n); if UI.settings then UI.settings:SetScale(n) end else Print("Usage: /dcon scale 0.6-1.5") end
+    elseif cmd == "settings" or cmd == "config" then
+        if settingsFrame then settingsFrame:Show() end
+    elseif cmd == "minimap" then
+        S.minimap = not S.minimap
+        if minimapButton then minimapButton:SetShown(S.minimap) end
+        Print("Minimap icon " .. (S.minimap and "shown." or "hidden."))
     elseif cmd == "help" then
         Print("/dcon - toggle window | /dcon host <theme> | /dcon start | /dcon end | /dcon cancel")
-        Print("/dcon history | /dcon sync | /dcon reset | /dcon resetpos | /dcon announce | /dcon popup | /dcon scale <n>")
+        Print("/dcon history | /dcon sync | /dcon reset | /dcon resetpos | /dcon settings | /dcon minimap | /dcon announce | /dcon popup | /dcon scale <n>")
     else
         UI.main:SetShown(not UI.main:IsShown())
     end
@@ -1513,6 +1750,7 @@ local function InitDB()
     end
     S = DB.settings
     if S.channel ~= "GROUP" and S.channel ~= "GUILD" then S.channel = "GROUP" end
+    S.scale = math.max(.6, math.min(1.5, tonumber(S.scale) or 1))
     DB.history = DB.history or {}
     DB.drafts = DB.drafts or {}
     DB.finished = DB.finished or {}
@@ -1540,6 +1778,7 @@ DC:SetScript("OnEvent", function(self, event, ...)
         lastRefill = GetTime()
         lastGroupSize = GetNumGroupMembers()
         BuildMain()
+        BuildMinimapButton()
         self:RegisterEvent("CHAT_MSG_ADDON")
         self:RegisterEvent("GROUP_ROSTER_UPDATE")
         -- Hosts resume their contest after a reload; everyone else asks to catch up.
@@ -1552,6 +1791,7 @@ DC:SetScript("OnEvent", function(self, event, ...)
             end
         end)
         if S.showOnLogin then UI.main:Show() end
+        if Minimap then Minimap:HookScript("OnSizeChanged", PositionMinimap) end
         Refresh()
         Print("loaded. Type /dcon to open, /dcon help for commands.")
     elseif event == "CHAT_MSG_ADDON" then
